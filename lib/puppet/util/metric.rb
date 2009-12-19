@@ -1,5 +1,6 @@
 # included so we can test object types
 require 'puppet'
+require 'RRD'
 
 # A class for handling metrics.  This is currently ridiculously hackish.
 class Puppet::Util::Metric
@@ -31,7 +32,6 @@ class Puppet::Util::Metric
 
         start ||= Time.now.to_i - 5
 
-        @rrd = RRDtool.new(self.path)
         args = []
 
         values.each { |value|
@@ -42,14 +42,17 @@ class Puppet::Util::Metric
         args.push "RRA:AVERAGE:0.5:1:300"
 
         begin
-            @rrd.create( Puppet[:rrdinterval].to_i, start, args)
+        RRD.create(self.path,
+                "--start", start.to_s,
+                "--step", Puppet[:rrdinterval].to_i,
+                *args)
         rescue => detail
             raise "Could not create RRD file %s: %s" % [path,detail]
         end
     end
 
     def dump
-        puts @rrd.info
+        puts RRD.info(self.path)
     end
 
     def graph(range = nil)
@@ -84,12 +87,12 @@ class Puppet::Util::Metric
             if range
                 args.push("--start",range[0],"--end",range[1])
             else
-                args.push("--start", Time.now.to_i - time, "--end", Time.now.to_i)
+                args.push("--start", (Time.now.to_i - time).to_s, "--end", Time.now.to_i.to_s)
             end
 
             begin
-                #Puppet.warning "args = #{args}"
-                RRDtool.graph( args )
+                #Puppet.warning "args = #{args.join("|")}"
+                RRD.graph( * args )
             rescue => detail
                 Puppet.err "Failed to graph %s: %s" % [self.name,detail]
             end
@@ -122,7 +125,6 @@ class Puppet::Util::Metric
             self.create(time - 5)
         end
 
-        @rrd ||= RRDtool.new(self.path)
 
         # XXX this is not terribly error-resistant
         args = [time]
@@ -135,7 +137,9 @@ class Puppet::Util::Metric
         arg = args.join(":")
         template = temps.join(":")
         begin
-            @rrd.update( template, [ arg ] )
+            RRD.update(self.path, 
+                "--template", template, 
+                arg )
             #system("rrdtool updatev %s '%s'" % [self.path, arg])
         rescue => detail
             raise Puppet::Error, "Failed to update %s: %s" % [self.name,detail]

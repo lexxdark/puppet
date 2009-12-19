@@ -53,6 +53,8 @@ class TestMetric < PuppetTest::TestCase
         report = Puppet::Transaction::Report.new
         time = Time.now.to_i
         start = time
+        #in normal runs puppet does this for us (not sure where)
+        Dir.mkdir(Puppet[:rrddir]) unless File.directory?(Puppet[:rrddir])
         10.times {
             rundata(report, time)
             time += 300

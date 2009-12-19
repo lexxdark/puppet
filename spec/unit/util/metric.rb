@@ -7,6 +7,13 @@ require 'puppet/util/metric'
 describe Puppet::Util::Metric do
     before do
         @metric = Puppet::Util::Metric.new("foo")
+        #if we don't retrive it before the test the :rrddir test will
+        #fail at after
+        @basedir = @metric.basedir
+    end
+
+    after do
+        FileUtils.rm_rf(@basedir) if File.directory?(@basedir)
     end
 
     it "should be aliased to Puppet::Metric" do
@@ -84,12 +91,46 @@ describe Puppet::Util::Metric do
         @metric[:foo].should be_nil
     end
 
-    # LAK: I'm not taking the time to develop these tests right now.
-    # I expect they should actually be extracted into a separate class
-    # anyway.
-    it "should be able to graph metrics using RRDTool"
+    it "should be able to graph metrics using RRDTool" do
+        ensure_rrd_folder
+        populate_metric
+        @metric.graph
+    end
 
-    it "should be able to create a new RRDTool database"
+    it "should be able to create a new RRDTool database" do
+        ensure_rrd_folder
+        add_random_values_to_metric
+        @metric.create
+        File.exist?(@metric.path).should == true
+    end
 
-    it "should be able to store metrics into an RRDTool database"
+    it "should be able to store metrics into an RRDTool database" do
+        ensure_rrd_folder
+        populate_metric
+        File.exist?(@metric.path).should == true
+    end
+
+    def ensure_rrd_folder()
+        #in normal runs puppet does this for us (not sure where)
+        FileUtils.mkdir_p(@basedir) unless File.directory?(@basedir)
+    end
+
+    def populate_metric()
+        time = Time.now.to_i
+        time -= 100 * 1800
+        200.times {
+            @metric = Puppet::Util::Metric.new("foo")
+            add_random_values_to_metric
+            @metric.store(time)
+            time += 1800
+        }
+    end
+
+    def add_random_values_to_metric()
+        @metric.values.clear
+        random_params = { :data1 => 10, :data2 => 30, :data3 => 100 }
+        random_params.each { | label, maxvalue |
+            @metric.newvalue(label, rand(maxvalue))
+    }
+    end
 end
